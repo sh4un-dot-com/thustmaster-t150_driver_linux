@@ -9,24 +9,20 @@ set -euo pipefail
 
 attr=$(find /sys/devices -name firmware_version 2>/dev/null | head -n1 || true)
 if [ -z "$attr" ]; then
-  echo "firmware_version not found. Is the module loaded?"
+  echo "firmware_version not found. Is the module loaded and the wheel plugged in?"
+  echo "  lsmod | grep hid_t150"
+  echo "  dmesg | grep -i t150"
   exit 1
 fi
 
 devdir=$(dirname "$attr")
 echo "Device dir: $devdir"
 
-echo "Firmware version:"
-cat "$devdir/firmware_version" || true
-
-echo "Range:"
-cat "$devdir/range" || true
-
-echo "Autocenter:"
-cat "$devdir/autocenter" || true
-
-echo "Gain:"
-cat "$devdir/gain" || true
+for name in firmware_version max_range range autocenter enable_autocenter gain spring_level damper_level supported_ff_effects settings_cache_age_ms; do
+  if [ -e "$devdir/$name" ]; then
+    echo "$name: $(cat "$devdir/$name" 2>/dev/null || echo unreadable)"
+  fi
+done
 
 echo
 echo "Refreshing settings (writing to reload_settings)..."
@@ -50,6 +46,6 @@ fi
 
 echo "Setting gain to 32768..."
 printf "%d\n" 32768 > "$devdir/gain"
-echo "Gain now: $(cat $devdir/gain)"
+echo "Gain now: $(cat "$devdir/gain")"
 
 echo "Done."

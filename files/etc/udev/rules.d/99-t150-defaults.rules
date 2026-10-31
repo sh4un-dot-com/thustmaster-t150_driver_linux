@@ -1,0 +1,4 @@
+# Optional defaults applied when the wheel is plugged in.
+# Uncomment and edit to taste, then run: udevadm control --reload && udevadm trigger
+#
+# SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{range}="900", ATTR{gain}="49150", ATTR{spring_level}="100", ATTR{damper_level}="100"

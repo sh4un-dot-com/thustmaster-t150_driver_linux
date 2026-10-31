@@ -1,0 +1,40 @@
+#!/bin/sh
+# Steal a T150/TMX hid device from hid-generic and bind hid-t150.
+# Called from udev as: hid-t150-rebind %k
+# or from install.sh with the hid kernel name (0003:044F:B677.xxxx).
+
+set -eu
+
+dev=${1:-}
+if [ -z "$dev" ]; then
+	echo "usage: hid-t150-rebind HID_KERNEL_NAME" >&2
+	exit 2
+fi
+
+modprobe hid-t150 2>/dev/null || true
+
+if [ ! -d /sys/bus/hid/drivers/hid-t150 ]; then
+	echo "hid-t150 is not loaded" >&2
+	exit 1
+fi
+
+if [ ! -e "/sys/bus/hid/devices/$dev" ]; then
+	echo "no such hid device: $dev" >&2
+	exit 1
+fi
+
+if [ -e "/sys/bus/hid/drivers/hid-t150/$dev" ]; then
+	exit 0
+fi
+
+if [ -e "/sys/bus/hid/drivers/hid-generic/$dev" ]; then
+	printf '%s' "$dev" > /sys/bus/hid/drivers/hid-generic/unbind
+fi
+
+if ! printf '%s' "$dev" > /sys/bus/hid/drivers/hid-t150/bind; then
+	if [ -d /sys/bus/hid/drivers/hid-generic ]; then
+		printf '%s' "$dev" > /sys/bus/hid/drivers/hid-generic/bind || true
+	fi
+	echo "failed to bind hid-t150 to $dev" >&2
+	exit 1
+fi
