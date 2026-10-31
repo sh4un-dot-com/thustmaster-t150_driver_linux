@@ -32,12 +32,17 @@ rm -f /etc/udev/rules.d/10-t150.rules \
 	/etc/modprobe.d/hid-t150.conf \
 	/usr/lib/udev/hid-t150-rebind
 
-# Current-kernel extra module from `make install`
+# Current-kernel extra module from `make install` (plain or zstd-compressed)
 KVER=$(uname -r)
 rm -f "/lib/modules/$KVER/extra/hid-t150/hid-t150.ko" \
+	"/lib/modules/$KVER/extra/hid-t150/hid-t150.ko.zst" \
 	"/lib/modules/$KVER/extra/hid-t150.ko" \
+	"/lib/modules/$KVER/extra/hid-t150.ko.zst" \
 	"/lib/modules/$KVER/updates/dkms/hid-t150.ko" \
-	"/lib/modules/$KVER/kernel/drivers/input/joystick/hid-t150.ko"
+	"/lib/modules/$KVER/updates/dkms/hid-t150.ko.zst" \
+	"/lib/modules/$KVER/kernel/drivers/input/joystick/hid-t150.ko" \
+	"/lib/modules/$KVER/kernel/drivers/input/joystick/hid-t150.ko.zst"
+rmdir "/lib/modules/$KVER/extra/hid-t150" 2>/dev/null || true
 depmod -a "$KVER" || true
 
 udevadm control --reload || true

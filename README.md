@@ -1,120 +1,202 @@
-# Thrustmaster T150 and TMX Force Feedback Wheel Linux drivers
-**DISCLAMER**
-*This is not an official driver from Thrustmaster and is provided without any kind of warranty. Loading and using this driver is at your own risk; I don't take responsibility for kernel panics, devices bricked or any other kind of inconvenience*
+# Thrustmaster T150 and TMX Force Feedback Wheel Linux driver
 
-## Project status
+**Disclaimer**
+This is not an official driver from Thrustmaster and is provided without any
+kind of warranty. Loading and using this driver is at your own risk. The
+authors take no responsibility for kernel panics, bricked devices, or any
+other inconvenience.
 
-### What's working
-+ All axis and buttons of the wheel are reported
-+ Axis fuzz/flat is cleared (avoids a fake center deadzone from the HID descriptor)
-+ You can set the range of the T150 wheel from 270° to 1080°
-+ You can set the range of the TMX wheel from 270° to 900°
-+ You can set the return force of the wheel from 0% to 100%
-+ Force feedback
-  * Global force feedback scale from 0% to 100% (`gain` sysfs and `FF_GAIN`)
-  * Hardware autocenter (`autocenter` sysfs and `FF_AUTOCENTER`)
-  * Periodic effects: `FF_SINE`, `FF_SAW_UP`, `FF_SAW_DOWN`
-  * Constant effects: `FF_CONSTANT` (including attack/fade envelopes)
-  * Condition effects: `FF_SPRING`, `FF_DAMPER`
-  * `FF_RUMBLE` is rewritten as a short sine (useful for games that only rumble)
-  * Oversteer-style `spring_level` / `damper_level` (0-100) scale condition effects
-+ Firmware version is reported
-+ Settings are read back from the wheel at probe and on demand
-+ Range change events coming from the hardware are handled automatically
-+ FFB USB traffic is serialized on a workqueue (safe from input IRQ context)
+Out-of-tree HID driver (`hid-t150`) for:
 
-### What is missing
-- Device-side firmware upgrades (`firmware_upgrade` sysfs attribute returns `-EOPNOTSUPP`)
-- Extra condition effects (`FF_FRICTION`, `FF_INERTIA`) until the USB codes are confirmed
+| Wheel | USB ID after init | Rotation | Notes |
+|-------|-------------------|----------|--------|
+| T150 / T150RS | `044f:b677` | 270°–1080° | Mode switch on **PS3** before plugging in |
+| TMX | `044f:b67f` | 270°–900° | Needs a separate init driver first |
 
-### Switch the wheel from FFB to full T150
-Since kernel version 5.13, hid_thrustmaster automatically switches some Thrustmaster devices into full mode. The T150 is covered by this driver. The TMX wheel does not have support in hid_thrustmaster and requires either using [TMX-Driver](https://github.com/emtek995/TMX-driver) (kernel driver) or [tmdrv](https://github.com/her001/tmdrv) (python userspace driver) to initialize.
+The in-tree `hid-thrustmaster` driver (kernel 5.13+) initializes a T150 from
+boot ID `044f:b65d` into full T150RS mode. TMX init is still
+[TMX-Driver](https://github.com/emtek995/TMX-driver) or
+[tmdrv](https://github.com/her001/tmdrv).
 
-## How to use the driver
-**For T150, always put the switch of your wheel to the `PS3` position before plugging it into your machine!**
-For the TMX, plug the wheel into your machine and load your preferred initialization driver. The mode switch will only be used to swap the clutch and accelerator pedals if using the T3PA-Pro in hangdown mode.
+## Status
 
-### Setting up the wheel parameters
-You can edit the settings of each wheel attached to the machine by writing the sysfs attributes usually found in the
-subdirectories at `/sys/devices`. You can see in `dmesg` what path in /sys the input subsystem assigned to the wheel:
-for example if you see `input: Thrustmaster T150 steering wheel as /devices/pci0000:00/0000:00:14.0/usb1/1-1/input/input27`
-then the attributes will be located at `/sys/devices/pci0000:00/0000:00:14.0/usb1/1-1/input/input27/device/`.
+Verified on CachyOS Linux 7.3 with a T150RS (firmware 35) in PS3 mode.
 
-This table contains a summary of each attribute
+### Working
 
-|Attribute          |Value                         |Description                                                           |
-|-------------------|------------------------------|----------------------------------------------------------------------|
-|`range`            |decimal from `270` to `1080`  |How far the wheel turns (TMX limited to 900)                          |
-|`autocenter`       |decimal from `0` to `65535`   |The force used to re-center the wheel                                 |
-|`enable_autocenter`|boolean `y` xor `n`           |Use the user defined return force or let the game handle it through ffb|
-|`gain`             |decimal from `0` to `65535`   |Force feedback intensity. 0 no effects are reproduced                 |
-|`spring_level`     |decimal from `0` to `100`     |Scale applied to `FF_SPRING` effects (Oversteer compatible)           |
-|`damper_level`     |decimal from `0` to `100`     |Scale applied to `FF_DAMPER` effects (Oversteer compatible)           |
-|`firmware_version` |decimal                       |Read only, the current firmware running on the wheel                  |
-|`max_range`        |decimal                       |Read only, hardware maximum range (T150 1080, TMX 900)              |
-|`settings_cache_age_ms`|decimal                 |Read only, age of cached wheel settings in milliseconds (`-1` if unknown) |
-|`supported_ff_effects`|comma-separated tokens     |Read only, list of force-feedback effect types exposed by the driver |
-|`reload_settings`  |write-any                    |Trigger a probe of the wheel to refresh the cached settings          |
-|`firmware_upgrade` |binary (write-only)         |Not implemented; writes fail with `EOPNOTSUPP`                       |
+- All wheel and pedal axes, and buttons
+- Axis fuzz/flat cleared (the HID descriptor otherwise adds a fake center deadzone)
+- Force feedback, uploaded from a workqueue (safe from input IRQ context)
+  - `FF_GAIN`, `FF_AUTOCENTER`
+  - `FF_CONSTANT` (with attack/fade envelopes)
+  - `FF_SINE`, `FF_SAW_UP`, `FF_SAW_DOWN`
+  - `FF_SPRING`, `FF_DAMPER` (scaled by `spring_level` / `damper_level`)
+  - `FF_RUMBLE` rewritten as a short east-facing sine
+- Up to **9** simultaneous effects (hardware packet IDs are 8-bit)
+- Sysfs knobs for range, gain, autocenter, spring/damper levels
+- [Oversteer](https://github.com/berarma/oversteer) compatible
+- Firmware version reported (vendor GET request 86)
+- `hid-generic` is rebound off the wheel so FFB is actually available
 
-`show` operations use a short settings cache (300ms) to reduce USB control
-traffic while keeping values fresh; writing `reload_settings` still forces
-an immediate hardware read.
+### Missing
 
-[Oversteer](https://github.com/berarma/oversteer) can drive `range`, `gain`, `autocenter`, `spring_level` and `damper_level`.
+- Device-side firmware upgrades (`firmware_upgrade` returns `-EOPNOTSUPP`)
+- `FF_FRICTION` and `FF_INERTIA` until the USB commit codes are confirmed
 
-### Custom defaults
-To automatically set the wheel to some custom default settings when plugged you'll have to write a simple udev rule. In `/etc/udev/rules.d` create a text file called something like `99-t150-defaults.rules` and write a rule like this below. Refer to the output of `udevadm info --attribute-walk /sys/devices/${WHEEL_DEVICE_PATH}` in case rules from example below do not match.
+The wheel's vendor GET often returns a short packet (firmware in byte 1,
+not a full 8-byte settings block). Probe still applies default gain (~75%),
+full range, and autocenter off. After that, sysfs reads use the driver's
+cache. Writes always go out on the interrupt OUT endpoint.
+
+## Install
+
+Needs matching kernel headers (`linux-headers` / `linux-cachyos-headers`)
+and a compiler. Clang-built kernels (CachyOS and some custom Arch/Fedora
+kernels) are detected automatically; the Makefile passes `LLVM=1`.
+
+```sh
+sudo ./install.sh
 ```
-SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{range}="270", ATTR{gain}="49150"
+
+The script:
+
+1. Builds the module (DKMS when `dkms` is installed, otherwise for the
+   running kernel only)
+2. Installs udev rules, the hid-generic rebind helper, `modules-load.d`,
+   and `modprobe.d`
+3. Loads `hid-t150` and rebinds any already-plugged T150/TMX
+
+`hid-generic` matches every HID device, and these IDs are not on the
+kernel special-driver list, so a T150/TMX otherwise shows up as a joystick
+**without force feedback**. The udev helper
+`/usr/lib/udev/hid-t150-rebind` steals the device on bind.
+
+Install [DKMS](https://github.com/dkms-project/dkms) if you want the
+module rebuilt on kernel upgrades:
+
+```sh
+# Arch / CachyOS
+sudo pacman -S dkms
+sudo ./install.sh
 ```
-Then run `udevadm control --reload` and `udevadm trigger` to re-load the rules.
-The rule in the example should set the turning range to 270°.
 
-## How to install and load the driver
-Run `install.sh` as root (`sudo ./install.sh`). The script will:
+Without DKMS, run `sudo ./install.sh` again after a kernel update.
 
-* build the module (via DKMS when `dkms` is installed, otherwise for the running kernel only)
-* install udev rules, a hid-generic rebind helper, `modules-load.d`, and `modprobe.d`
-* `modprobe hid_t150` and bind any already-plugged T150/TMX away from `hid-generic`
+Unsigned out-of-tree modules load when signature enforcement is off
+(`module.sig_enforce=0`, the CachyOS default). `dmesg` may report
+`module verification failed: signature and/or required key missing` and
+taint the kernel; that is expected.
 
-The in-tree `hid-generic` driver matches every HID device. The T150 (`044f:b677`) and TMX (`044f:b67f`) IDs are not on the kernel's special-driver list, so without this driver they appear as a joystick with **no force feedback**. `install.sh` and the udev rule rebind them to `hid-t150`.
+### Check that the driver owns the wheel
 
-Clang-built kernels (CachyOS, some Fedora/Arch custom kernels) are detected automatically; the Makefile passes `LLVM=1`. Unsigned modules load on kernels that do not enforce signatures (`module.sig_enforce=0`, the CachyOS default).
-
-To check if the module owns the wheel:
-
-```
+```sh
 lsmod | grep hid_t150
 ls /sys/bus/hid/drivers/hid-t150
 dmesg | grep -i t150
+./hid-t150/test_sysfs.sh
 ```
 
-To remove everything, run `uninstall.sh` as root. A kernel upgrade without DKMS needs `install.sh` again.
+You should see a hid device such as `0003:044F:B677.xxxx` under the
+`hid-t150` driver, firmware_version readable, and `capabilities/ff`
+non-zero on the input device.
 
-### Quick test script
+Force feedback: `fftest /dev/input/eventN` from linuxconsole tools, or
+any game that uses Linux FF.
 
-A helper script at `hid-t150/test_sysfs.sh` finds the device sysfs directory and exercises the attributes (`reload_settings`, `gain`, `spring_level`, etc.). Example usage:
+Uninstall:
 
 ```sh
-# from the repo root
-./hid-t150/test_sysfs.sh
-
-# to run write tests (gain change) run as root
-sudo ./hid-t150/test_sysfs.sh
+sudo ./uninstall.sh
 ```
 
-Force feedback can be smoke-tested with `fftest` from linuxconsole tools once the wheel is bound to `hid-t150` (`capabilities/ff` on the input device must be non-zero).
+### Manual build
 
-This script is a convenience for manual smoke tests after loading the
-module; it does not attempt destructive operations.
-
-### Manually
-Copy the udev rules into `/etc/udev/rules.d/` and reload the udev rules (or reboot)...
-
-#### Build the drivers
-Install the required tools to compile (like `base-devel`/`build-essential`, matching `linux-headers`) and run
-```
+```sh
 make
+sudo insmod hid-t150/hid-t150.ko
+sudo /usr/lib/udev/hid-t150-rebind 0003:044F:B677.xxxx   # after installing the helper
 ```
-in the repository root. Load the `.ko` file with `insmod` and unload with `rmmod`.
+
+`insmod` alone leaves an already-probed wheel on `hid-generic`. Prefer
+`install.sh`, or run the rebind helper with the hid kernel name from
+`ls /sys/bus/hid/devices`.
+
+## Sysfs
+
+Attributes live on the **HID** device, not the input node:
+
+```
+/sys/bus/hid/devices/0003:044F:B677.*/
+/sys/bus/hid/devices/0003:044F:B67F.*/
+```
+
+`dmesg` prints the hid path, for example
+`hid-t150 0003:044F:B677.0028: T150/TMX wheel ready`.
+
+udev chmods the writable knobs to `0666` so Oversteer can use them as a
+normal user. (The kernel forbids world-writable `DEVICE_ATTR` modes, so
+the driver creates them as `0664` and udev opens them up.)
+
+| Attribute | Values | Description |
+|-----------|--------|-------------|
+| `range` | 270–1080 (TMX max 900) | Wheel rotation in degrees |
+| `gain` | 0–65535 | Global FFB intensity |
+| `autocenter` | 0–65535 | Hardware spring-back strength |
+| `enable_autocenter` | `y` / `n` | Keep hardware autocenter while a game has the device open |
+| `spring_level` | 0–100 | Scale applied to `FF_SPRING` |
+| `damper_level` | 0–100 | Scale applied to `FF_DAMPER` |
+| `firmware_version` | integer, read-only | Firmware reported by the wheel |
+| `max_range` | 1080 or 900, read-only | Hardware maximum rotation |
+| `settings_cache_age_ms` | integer or `-1` | Age of the cached settings |
+| `supported_ff_effects` | tokens, read-only | Effects this driver exposes |
+| `reload_settings` | write-only, root | Force a vendor GET (short reads still succeed) |
+| `firmware_upgrade` | write-only | Always `-EOPNOTSUPP` |
+
+Reads use a 300 ms cache so Oversteer polling does not hammer USB.
+Writes go to the wheel immediately and update the cache.
+
+Oversteer drives `range`, `gain`, `autocenter`, `spring_level`, and
+`damper_level`.
+
+### Custom plug-in defaults
+
+`install.sh` copies a commented template to
+`/etc/udev/rules.d/99-t150-defaults.rules`. Uncomment and edit:
+
+```
+SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{range}="900", ATTR{gain}="49150"
+```
+
+Then:
+
+```sh
+sudo udevadm control --reload
+sudo udevadm trigger
+```
+
+## Troubleshooting
+
+**Joystick works, FFB does not.** The device is still on `hid-generic`.
+
+```sh
+ls -l /sys/bus/hid/devices/0003:044F:B677.*/driver
+sudo /usr/lib/udev/hid-t150-rebind "$(basename /sys/bus/hid/devices/0003:044F:B677.*)"
+```
+
+The driver symlink should end in `hid-t150`.
+
+**Wheel never reaches `044f:b677`.** T150: set the switch to PS3, unplug,
+replug. Confirm `hid-thrustmaster` initialized it (`dmesg | grep -i thrust`).
+TMX: load TMX-Driver or tmdrv first.
+
+**Module missing after a reboot or kernel update.**
+`lsmod | grep hid_t150` empty: `sudo ./install.sh` again. Install `dkms`
+to survive kernel upgrades.
+
+**`sign-file: certs/signing_key.pem` during install.** The distro kernel
+is signed; headers do not ship a private key. Harmless when
+`module.sig_enforce` is `N`.
+
+## License
+
+GPL-2.0. See [LICENSE](LICENSE).

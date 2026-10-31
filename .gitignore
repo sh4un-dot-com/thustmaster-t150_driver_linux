@@ -1,4 +1,17 @@
-build/*
+# kbuild outputs (do not commit a .ko built for one kernel)
+hid-t150/*.o
+hid-t150/*.ko
+hid-t150/*.mod
+hid-t150/*.mod.c
+hid-t150/*.mod.o
+hid-t150/Module.symvers
+hid-t150/modules.order
+hid-t150/.*.cmd
+hid-t150/.tmp*
+hid-t150/.module-common.o
+hid-t150/*.o.d
+build/
+
 .vscode
 .idea
 traffic/sniffer
