@@ -31,6 +31,10 @@ static ssize_t t150_show_spring_level(struct device *dev, struct device_attribut
 static ssize_t t150_store_damper_level(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t count);
 static ssize_t t150_show_damper_level(struct device *dev, struct device_attribute *attr, char *buf);
+static ssize_t t150_store_preset(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count);
+static ssize_t t150_show_preset(struct device *dev, struct device_attribute *attr, char *buf);
+static ssize_t t150_show_presets(struct device *dev, struct device_attribute *attr, char *buf);
 
 static ssize_t t150_store_reload_settings(struct device *dev, struct device_attribute *attr,
 	const char *buf, size_t count);
@@ -49,5 +53,7 @@ static DEVICE_ATTR(settings_cache_age_ms, 0444, t150_show_settings_cache_age_ms,
 static DEVICE_ATTR(supported_ff_effects, 0444, t150_show_supported_ff_effects, 0);
 static DEVICE_ATTR(spring_level, 0664, t150_show_spring_level, t150_store_spring_level);
 static DEVICE_ATTR(damper_level, 0664, t150_show_damper_level, t150_store_damper_level);
+static DEVICE_ATTR(preset, 0664, t150_show_preset, t150_store_preset);
+static DEVICE_ATTR(presets, 0444, t150_show_presets, 0);
 static DEVICE_ATTR(reload_settings, 0200, NULL, t150_store_reload_settings);
 static DEVICE_ATTR(firmware_upgrade, 0200, NULL, t150_store_firmware_upgrade);

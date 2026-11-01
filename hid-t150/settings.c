@@ -301,46 +301,105 @@ static int t150_get_max_range(struct t150 *t150, uint16_t *max_range)
 	return 0;
 }
 
+static int t150_apply_preset(struct t150 *t150, const struct t150_preset *preset)
+{
+	uint16_t max_range = 0;
+	uint16_t range;
+	uint16_t range_wire;
+	int errno;
+
+	if (!preset)
+		return -EINVAL;
+
+	if (t150_get_max_range(t150, &max_range) < 0)
+		return -EINVAL;
+
+	range = t150_preset_range_deg(preset, max_range);
+	range_wire = DIV_ROUND_CLOSEST((uint32_t)range * 0xffff, max_range);
+
+	errno = t150_set_gain(t150, preset->gain);
+	if (errno)
+		return errno;
+
+	errno = t150_set_enable_autocenter(t150, preset->enable_autocenter);
+	if (errno)
+		return errno;
+
+	errno = t150_set_autocenter(t150, preset->autocenter);
+	if (errno)
+		return errno;
+
+	errno = t150_set_range(t150, range_wire);
+	if (errno)
+		return errno;
+
+	t150->spring_level = preset->spring_level;
+	t150->damper_level = preset->damper_level;
+	t150_ff_resubmit_condition_effects(t150, FF_SPRING);
+	t150_ff_resubmit_condition_effects(t150, FF_DAMPER);
+
+	hid_info(t150->hid_device,
+		 "preset %s: range=%u gain=%u autocenter=%u enable=%u spring=%u damper=%u\n",
+		 preset->name, range, preset->gain, preset->autocenter,
+		 preset->enable_autocenter, preset->spring_level,
+		 preset->damper_level);
+
+	return 0;
+}
+
+static const struct t150_preset *t150_matched_preset(struct t150 *t150)
+{
+	uint16_t max_range = 0;
+	uint16_t r = 0, gain = 0, ac = 0;
+	bool en = false;
+	uint16_t range_deg;
+
+	if (t150_get_max_range(t150, &max_range) < 0)
+		return NULL;
+
+	t150_get_range(t150, &r);
+	t150_get_gain(t150, &gain);
+	t150_get_autocenter(t150, &ac);
+	t150_get_enable_autocenter(t150, &en);
+	range_deg = DIV_ROUND_CLOSEST((uint32_t)r * max_range, 0xffff);
+
+	return t150_preset_lookup_values(range_deg, gain, ac, en,
+					 t150->spring_level, t150->damper_level,
+					 max_range);
+}
+
 static int t150_setup_task(struct t150 *t150)
 {
+	const struct t150_preset *preset;
 	int errno;
 
 	errno = t150_refresh_settings_cached(t150, true);
-	if (errno == 0) {
+	if (errno == 0)
 		hid_info(t150->hid_device,
 			 "settings read from wheel: gain=%u autocenter=%u range=%u fw=%u\n",
 			 t150->settings.gain,
 			 t150->settings.autocenter_force,
 			 t150->settings.range,
 			 t150->settings.firmware_version);
-		return 0;
-	}
-
-	if (errno > 0)
-		hid_info(t150->hid_device,
-			 "firmware version %u; applying default gain/range/autocenter\n",
+	else if (errno > 0)
+		hid_info(t150->hid_device, "firmware version %u\n",
 			 t150->settings.firmware_version);
 	else
 		hid_warn(t150->hid_device,
-			 "unable to query wheel settings (%d), using defaults\n", errno);
+			 "unable to query wheel settings (%d)\n", errno);
 
-	errno = t150_set_gain(t150, 0xbffe); /* ~75% */
-	if (errno)
-		hid_err(t150->hid_device, "Error %d while setting the t150 default gain\n", errno);
+	preset = t150_preset_by_name(default_preset);
+	if (!preset) {
+		hid_warn(t150->hid_device,
+			 "unknown preset '%s', using sim\n",
+			 default_preset ? default_preset : "");
+		preset = T150_PRESET_DEFAULT;
+	}
 
-	errno = t150_set_enable_autocenter(t150, false);
+	errno = t150_apply_preset(t150, preset);
 	if (errno)
-		hid_err(t150->hid_device,
-			"Error %d while setting the t150 default enable_autocenter\n", errno);
-
-	errno = t150_set_autocenter(t150, 0x7fff);
-	if (errno)
-		hid_err(t150->hid_device,
-			"Error %d while setting the t150 default autocenter\n", errno);
-
-	errno = t150_set_range(t150, 0xffff);
-	if (errno)
-		hid_err(t150->hid_device, "Error %d while setting the t150 default range\n", errno);
+		hid_err(t150->hid_device, "failed to apply preset %s: %d\n",
+			preset->name, errno);
 
 	hid_info(t150->hid_device, "Setup completed! Firmware version is %d\n",
 		 t150->settings.firmware_version);

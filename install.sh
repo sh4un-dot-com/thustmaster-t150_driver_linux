@@ -76,6 +76,7 @@ selinux_relabel() {
 	if command -v restorecon >/dev/null 2>&1; then
 		echo "==== SELinux restorecon ===="
 		restorecon -F "$REBIND_HELPER" \
+			/usr/bin/t150-preset \
 			/etc/udev/rules.d/10-t150.rules \
 			/etc/udev/rules.d/99-t150-defaults.rules \
 			/etc/modules-load.d/hid-t150.conf \
@@ -126,6 +127,7 @@ install_udev_and_autoload() {
 	install -m 644 "$SCRIPT_DIR/files/etc/modules-load.d/hid-t150.conf" /etc/modules-load.d/
 	install -m 644 "$SCRIPT_DIR/files/etc/modprobe.d/hid-t150.conf" /etc/modprobe.d/
 	install -m 755 "$SCRIPT_DIR/files/usr/lib/udev/hid-t150-rebind" "$REBIND_HELPER"
+	install -m 755 "$SCRIPT_DIR/files/usr/bin/t150-preset" /usr/bin/t150-preset
 	selinux_relabel
 	udevadm control --reload
 }
@@ -157,10 +159,12 @@ if command -v dkms >/dev/null 2>&1; then
 
 	echo "==== CONFIG DKMS ===="
 	rm -rf "/usr/src/t150-$VERSION"
-	install -d "/usr/src/t150-$VERSION/hid-t150" "/usr/src/t150-$VERSION/build"
+	install -d "/usr/src/t150-$VERSION/hid-t150" "/usr/src/t150-$VERSION/build" \
+		"/usr/src/t150-$VERSION/common"
 
 	find hid-t150 -maxdepth 1 -type f \( -name '*.c' -o -name '*.h' -o -name 'Makefile' \) \
 		-exec cp -a {} "/usr/src/t150-$VERSION/hid-t150/" \;
+	cp ./common/t150_presets.h "/usr/src/t150-$VERSION/common/"
 	cp ./dkms_make.mak "/usr/src/t150-$VERSION/Makefile"
 	cp ./dkms.conf "/usr/src/t150-$VERSION/"
 
@@ -194,3 +198,6 @@ echo "  lsmod | grep hid_t150"
 echo "  ls -l /sys/bus/hid/drivers/hid-t150"
 echo "  dmesg | grep -i t150"
 echo "  ./hid-t150/test_sysfs.sh"
+echo "  t150-preset            # show current feel preset (default: sim)"
+echo "  t150-preset list       # sim arcade street offroad rally drift truck"
+echo "  t150-preset drift      # switch wheel feel"

@@ -8,5 +8,5 @@ ACTION=="bind", SUBSYSTEM=="hid", DRIVER=="hid-generic", KERNEL=="0003:044F:B677
 ACTION=="bind", SUBSYSTEM=="hid", DRIVER=="hid-generic", KERNEL=="0003:044F:B67F.*", RUN+="/usr/lib/udev/hid-t150-rebind %k"
 
 # Sysfs knobs used by Oversteer (world-writable, same as hid-tmff2)
-ACTION=="bind", SUBSYSTEM=="hid", DRIVER=="hid-t150", RUN+="/bin/sh -c 'chmod 0666 $sys$devpath/range $sys$devpath/gain $sys$devpath/autocenter $sys$devpath/enable_autocenter $sys$devpath/spring_level $sys$devpath/damper_level 2>/dev/null || true'"
-ACTION=="add", SUBSYSTEM=="hid", DRIVER=="hid-t150", RUN+="/bin/sh -c 'chmod 0666 $sys$devpath/range $sys$devpath/gain $sys$devpath/autocenter $sys$devpath/enable_autocenter $sys$devpath/spring_level $sys$devpath/damper_level 2>/dev/null || true'"
+ACTION=="bind", SUBSYSTEM=="hid", DRIVER=="hid-t150", RUN+="/bin/sh -c 'chmod 0666 $sys$devpath/range $sys$devpath/gain $sys$devpath/autocenter $sys$devpath/enable_autocenter $sys$devpath/spring_level $sys$devpath/damper_level $sys$devpath/preset 2>/dev/null || true'"
+ACTION=="add", SUBSYSTEM=="hid", DRIVER=="hid-t150", RUN+="/bin/sh -c 'chmod 0666 $sys$devpath/range $sys$devpath/gain $sys$devpath/autocenter $sys$devpath/enable_autocenter $sys$devpath/spring_level $sys$devpath/damper_level $sys$devpath/preset 2>/dev/null || true'"

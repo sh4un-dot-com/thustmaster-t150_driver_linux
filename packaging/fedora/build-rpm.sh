@@ -17,9 +17,10 @@ fi
 TOP=$(mktemp -d)
 trap 'rm -rf "$TOP"' EXIT
 
-mkdir -p "$TOP/$NAME/hid-t150" "$TOP/$NAME/files"
+mkdir -p "$TOP/$NAME/hid-t150" "$TOP/$NAME/files" "$TOP/$NAME/common"
 cp -a "$ROOT/hid-t150/"*.c "$ROOT/hid-t150/"*.h "$ROOT/hid-t150/Makefile" \
 	"$TOP/$NAME/hid-t150/"
+cp -a "$ROOT/common/t150_presets.h" "$TOP/$NAME/common/"
 cp -a "$ROOT/dkms.conf" "$ROOT/dkms_make.mak" "$ROOT/LICENSE" "$ROOT/README.md" \
 	"$TOP/$NAME/"
 cp -a "$ROOT/files/etc" "$ROOT/files/usr" "$TOP/$NAME/files/"

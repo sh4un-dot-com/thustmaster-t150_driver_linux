@@ -21,7 +21,7 @@ fi
 echo "Device dir: $devdir"
 echo "Driver: $(basename "$(readlink "$devdir/driver" 2>/dev/null || echo none)")"
 
-for name in firmware_version max_range range autocenter enable_autocenter gain spring_level damper_level supported_ff_effects settings_cache_age_ms; do
+for name in firmware_version max_range range autocenter enable_autocenter gain spring_level damper_level preset presets supported_ff_effects settings_cache_age_ms; do
 	if [ -e "$devdir/$name" ]; then
 		echo "$name: $(cat "$devdir/$name" 2>/dev/null || echo unreadable)"
 	fi

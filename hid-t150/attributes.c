@@ -9,6 +9,8 @@ static struct device_attribute *t150_attrs[] = {
 	&dev_attr_supported_ff_effects,
 	&dev_attr_spring_level,
 	&dev_attr_damper_level,
+	&dev_attr_preset,
+	&dev_attr_presets,
 	&dev_attr_reload_settings,
 	&dev_attr_firmware_upgrade,
 };
@@ -282,6 +284,52 @@ static ssize_t t150_store_damper_level(struct device *dev, struct device_attribu
 	t150->damper_level = value;
 	t150_ff_resubmit_condition_effects(t150, FF_DAMPER);
 	return count;
+}
+
+static ssize_t t150_show_preset(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct t150 *t150 = dev_get_drvdata(dev);
+	const struct t150_preset *preset;
+
+	if (t150_refresh_for_sysfs(t150) < 0)
+		return -EIO;
+
+	preset = t150_matched_preset(t150);
+	return sysfs_emit(buf, "%s\n", preset ? preset->name : "custom");
+}
+
+static ssize_t t150_store_preset(struct device *dev, struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct t150 *t150 = dev_get_drvdata(dev);
+	const struct t150_preset *preset;
+	int errno;
+
+	preset = t150_preset_by_name(buf);
+	if (!preset)
+		return -EINVAL;
+
+	errno = t150_apply_preset(t150, preset);
+	if (errno)
+		return errno;
+
+	return count;
+}
+
+static ssize_t t150_show_presets(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	unsigned int i;
+	int n = 0;
+
+	(void)dev;
+	(void)attr;
+
+	for (i = 0; i < T150_PRESET_COUNT; i++) {
+		n += scnprintf(buf + n, PAGE_SIZE - n, "%s%s",
+			       i ? " " : "", t150_presets[i].name);
+	}
+	n += scnprintf(buf + n, PAGE_SIZE - n, "\n");
+	return n;
 }
 
 static ssize_t t150_store_firmware_upgrade(struct device *dev, struct device_attribute *attr,

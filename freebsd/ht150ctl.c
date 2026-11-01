@@ -25,8 +25,11 @@ usage(void)
 	fprintf(stderr,
 	    "usage: ht150ctl [unit] [name [value]]\n"
 	    "       ht150ctl [unit] test on|off\n"
+	    "       ht150ctl [unit] preset [name]\n"
+	    "       ht150ctl [unit] presets\n"
 	    "\n"
-	    "Sysctl knobs live at dev.ht150.<unit>.wheel.*\n");
+	    "Sysctl knobs live at dev.ht150.<unit>.wheel.*\n"
+	    "Feel presets: sim arcade street offroad rally drift truck\n");
 	exit(1);
 }
 
@@ -48,6 +51,26 @@ sysctl_set(const char *name, int value)
 	return (sysctlbyname(name, NULL, NULL, &value, sizeof(value)));
 }
 
+static int
+sysctl_get_str(const char *name, char *out, size_t outlen)
+{
+	size_t len = outlen;
+
+	if (sysctlbyname(name, out, &len, NULL, 0) != 0)
+		return (-1);
+	if (len < outlen)
+		out[len] = '\0';
+	else
+		out[outlen - 1] = '\0';
+	return (0);
+}
+
+static int
+sysctl_set_str(const char *name, const char *value)
+{
+	return (sysctlbyname(name, NULL, NULL, value, strlen(value)));
+}
+
 int
 main(int argc, char **argv)
 {
@@ -65,6 +88,11 @@ main(int argc, char **argv)
 	}
 
 	if (argc == 1) {
+		char preset[64];
+
+		snprintf(path, sizeof(path), "dev.ht150.%d.wheel.preset", unit);
+		if (sysctl_get_str(path, preset, sizeof(preset)) == 0)
+			printf("preset=%s\n", preset);
 		for (i = 0; knobs[i] != NULL; i++) {
 			snprintf(path, sizeof(path),
 			    "dev.ht150.%d.wheel.%s", unit, knobs[i]);
@@ -90,6 +118,33 @@ main(int argc, char **argv)
 		if (sysctl_set(path, on) != 0)
 			err(1, "%s", path);
 		printf("test_ff=%d\n", on);
+		return (0);
+	}
+
+	if (strcmp(name, "presets") == 0) {
+		char list[128];
+
+		snprintf(path, sizeof(path), "dev.ht150.%d.wheel.presets", unit);
+		if (sysctl_get_str(path, list, sizeof(list)) != 0)
+			err(1, "%s", path);
+		printf("%s\n", list);
+		return (0);
+	}
+
+	if (strcmp(name, "preset") == 0) {
+		char cur[64];
+
+		snprintf(path, sizeof(path), "dev.ht150.%d.wheel.preset", unit);
+		if (value == NULL) {
+			if (sysctl_get_str(path, cur, sizeof(cur)) != 0)
+				err(1, "%s", path);
+			printf("preset=%s\n", cur);
+			return (0);
+		}
+		if (sysctl_set_str(path, value) != 0)
+			err(1, "%s", path);
+		if (sysctl_get_str(path, cur, sizeof(cur)) == 0)
+			printf("preset=%s\n", cur);
 		return (0);
 	}
 

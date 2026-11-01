@@ -29,6 +29,14 @@
 #include <dev/hid/hidmap.h>
 
 #include "ht150.h"
+#include "t150_presets.h"
+
+char ht150_default_preset[16] = "sim";
+SYSCTL_NODE(_hw, OID_AUTO, ht150, CTLFLAG_RD | CTLFLAG_MPSAFE, 0,
+    "Thrustmaster T150/TMX");
+SYSCTL_STRING(_hw_ht150, OID_AUTO, preset, CTLFLAG_RWTUN,
+    ht150_default_preset, sizeof(ht150_default_preset),
+    "Default feel preset applied at attach");
 
 static evdev_open_t	ht150_ev_open;
 static evdev_close_t	ht150_ev_close;
@@ -243,6 +251,42 @@ ht150_sysctl_level(SYSCTL_HANDLER_ARGS)
 }
 
 static int
+ht150_sysctl_preset(SYSCTL_HANDLER_ARGS)
+{
+	struct ht150_softc *sc = arg1;
+	const struct t150_preset *preset;
+	char buf[32];
+	int error;
+
+	preset = ht150_matched_preset(sc);
+	strlcpy(buf, preset != NULL ? preset->name : "custom", sizeof(buf));
+	error = sysctl_handle_string(oidp, buf, sizeof(buf), req);
+	if (error || req->newptr == NULL)
+		return (error);
+	preset = t150_preset_by_name(buf);
+	if (preset == NULL)
+		return (EINVAL);
+	return (ht150_apply_preset(sc, preset));
+}
+
+static int
+ht150_sysctl_presets(SYSCTL_HANDLER_ARGS)
+{
+	char buf[128];
+	unsigned int i;
+	int n = 0;
+
+	buf[0] = '\0';
+	for (i = 0; i < T150_PRESET_COUNT; i++) {
+		n += snprintf(buf + n, sizeof(buf) - n, "%s%s",
+		    i ? " " : "", t150_presets[i].name);
+		if (n < 0 || n >= (int)sizeof(buf))
+			break;
+	}
+	return (sysctl_handle_string(oidp, buf, sizeof(buf), req));
+}
+
+static int
 ht150_sysctl_test_ff(SYSCTL_HANDLER_ARGS)
 {
 	struct ht150_softc *sc = arg1;
@@ -288,6 +332,14 @@ ht150_sysctl_attach(struct ht150_softc *sc)
 	    "damper_level", CTLTYPE_INT | CTLFLAG_RW,
 	    &sc->damper_level, 0, ht150_sysctl_level, "I",
 	    "FF_DAMPER scale 0..100");
+	SYSCTL_ADD_PROC(&sc->sysctl_ctx, SYSCTL_CHILDREN(tree), OID_AUTO,
+	    "preset", CTLTYPE_STRING | CTLFLAG_RW | CTLFLAG_MPSAFE,
+	    sc, 0, ht150_sysctl_preset, "A",
+	    "Wheel-feel preset (sim arcade street offroad rally drift truck)");
+	SYSCTL_ADD_PROC(&sc->sysctl_ctx, SYSCTL_CHILDREN(tree), OID_AUTO,
+	    "presets", CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE,
+	    sc, 0, ht150_sysctl_presets, "A",
+	    "Available wheel-feel presets");
 	SYSCTL_ADD_U8(&sc->sysctl_ctx, SYSCTL_CHILDREN(tree), OID_AUTO,
 	    "firmware_version", CTLFLAG_RD, &sc->firmware_version, 0,
 	    "Firmware reported by vendor GET 86");
@@ -323,11 +375,12 @@ ht150_attach(device_t dev)
 	sc->product = hw->idProduct;
 	sc->max_range = (sc->product == USB_TMX_PRODUCT_ID) ?
 	    T150_RANGE_TMX_MAX : T150_RANGE_T150_MAX;
-	sc->range = sc->max_range;
-	sc->gain = 0xbffe;
-	sc->autocenter = 0x7fff;
-	sc->spring_level = 100;
-	sc->damper_level = 100;
+	sc->range = t150_preset_range_deg(T150_PRESET_DEFAULT, sc->max_range);
+	sc->gain = T150_PRESET_DEFAULT->gain;
+	sc->autocenter = T150_PRESET_DEFAULT->autocenter;
+	sc->enable_autocenter = T150_PRESET_DEFAULT->enable_autocenter;
+	sc->spring_level = T150_PRESET_DEFAULT->spring_level;
+	sc->damper_level = T150_PRESET_DEFAULT->damper_level;
 	sc->usb_buf_size = T150_USB_BUF_SIZE;
 	sx_init(&sc->lock, "ht150");
 	sc->usb_buf = malloc(sc->usb_buf_size, M_DEVBUF, M_WAITOK | M_ZERO);

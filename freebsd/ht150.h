@@ -46,7 +46,13 @@ int	ht150_set_autocenter(struct ht150_softc *sc, uint16_t force);
 int	ht150_set_enable_autocenter(struct ht150_softc *sc, int enable);
 int	ht150_set_range_deg(struct ht150_softc *sc, uint16_t degrees);
 int	ht150_read_settings(struct ht150_softc *sc);
+struct t150_preset;
+
+extern char	ht150_default_preset[];
+
 int	ht150_setup(struct ht150_softc *sc);
+int	ht150_apply_preset(struct ht150_softc *sc, const struct t150_preset *preset);
+const struct t150_preset *ht150_matched_preset(struct ht150_softc *sc);
 int	ht150_ff_upload(struct ht150_softc *sc, struct ff_effect *effect);
 int	ht150_ff_play(struct ht150_softc *sc, int effect_id, int times);
 int	ht150_ff_test(struct ht150_softc *sc, int enable);

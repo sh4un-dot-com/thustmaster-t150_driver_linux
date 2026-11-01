@@ -26,7 +26,8 @@ Out-of-tree Linux HID driver for the Thrustmaster T150/T150RS (044f:b677)
 and TMX (044f:b67f). DKMS rebuilds hid-t150.ko when the kernel is upgraded.
 
 The package also installs udev rules that rebind the wheel off hid-generic
-(so force feedback is available) and sysfs knobs used by Oversteer.
+(so force feedback is available), sysfs knobs used by Oversteer, and the
+t150-preset helper for sim/arcade/street/offroad/rally/drift/truck feel.
 
 Secure Boot: enroll the DKMS Machine Owner Key after install:
   sudo mokutil --import /var/lib/dkms/mok.pub
@@ -43,13 +44,18 @@ Silverblue/Kinoite (ostree) cannot use DKMS in the usual way.
 %install
 install -d %{buildroot}%{_usrsrc}/t150-%{version}/hid-t150
 install -d %{buildroot}%{_usrsrc}/t150-%{version}/build
+install -d %{buildroot}%{_usrsrc}/t150-%{version}/common
 install -m 644 hid-t150/*.c hid-t150/*.h hid-t150/Makefile \
         %{buildroot}%{_usrsrc}/t150-%{version}/hid-t150/
+install -m 644 common/t150_presets.h \
+        %{buildroot}%{_usrsrc}/t150-%{version}/common/
 install -m 644 dkms_make.mak %{buildroot}%{_usrsrc}/t150-%{version}/Makefile
 install -m 644 dkms.conf %{buildroot}%{_usrsrc}/t150-%{version}/
 
 install -D -m 755 files/usr/lib/udev/hid-t150-rebind \
         %{buildroot}%{_prefix}/lib/udev/hid-t150-rebind
+install -D -m 755 files/usr/bin/t150-preset \
+        %{buildroot}%{_bindir}/t150-preset
 install -D -m 644 files/etc/udev/rules.d/10-t150.rules \
         %{buildroot}%{_udevrulesdir}/10-t150.rules
 install -D -m 644 files/etc/modules-load.d/hid-t150.conf \
@@ -70,6 +76,7 @@ if command -v udevadm >/dev/null 2>&1; then
 fi
 if command -v restorecon >/dev/null 2>&1; then
         restorecon -F %{_prefix}/lib/udev/hid-t150-rebind \
+                %{_bindir}/t150-preset \
                 %{_udevrulesdir}/10-t150.rules \
                 %{_modulesloaddir}/hid-t150.conf \
                 %{_modprobedir}/hid-t150.conf \
@@ -100,6 +107,7 @@ fi
 %doc README.md
 %{_usrsrc}/t150-%{version}/
 %{_prefix}/lib/udev/hid-t150-rebind
+%{_bindir}/t150-preset
 %{_udevrulesdir}/10-t150.rules
 %{_modulesloaddir}/hid-t150.conf
 %{_modprobedir}/hid-t150.conf

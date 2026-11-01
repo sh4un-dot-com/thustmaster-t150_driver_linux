@@ -28,7 +28,11 @@ static int t150_set_autocenter(struct t150 *t150, uint16_t autocenter_force);
 static int t150_set_enable_autocenter(struct t150 *t150, bool enable);
 static int t150_set_range(struct t150 *t150, uint16_t range);
 
+struct t150_preset;
+
 static int t150_setup_task(struct t150 *t150);
+static int t150_apply_preset(struct t150 *t150, const struct t150_preset *preset);
+static const struct t150_preset *t150_matched_preset(struct t150 *t150);
 
 static int t150_read_settings(struct t150 *t150);
 static int t150_refresh_settings_cached(struct t150 *t150, bool force);

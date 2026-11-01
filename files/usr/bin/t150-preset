@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+# Apply a hid-t150 wheel-feel preset (sim, arcade, street, offroad, rally, drift, truck).
+set -euo pipefail
+
+usage() {
+	cat <<'EOF'
+Usage: t150-preset [NAME]
+       t150-preset list
+       t150-preset show
+
+Select a wheel-feel preset for a plugged-in T150 / TMX.
+
+  sim      Sim racing (default). Full rotation, game centering.
+  arcade   Arcade racers. 270°, hardware snap-back.
+  street   Street / open world (NFS, Forza Horizon). 540°.
+  offroad  Off-road. 540°, heavier damper.
+  rally    Rally (Dirt Rally, WRC). 540°, light damper.
+  drift    Drifting. 360°, no centering.
+  truck    Truck sims (ETS2, ATS). Full rotation, heavier feel.
+
+Plug-in default is sim. Change it with:
+  echo drift | sudo tee /sys/module/hid_t150/parameters/preset
+  # or in /etc/modprobe.d/hid-t150.conf:
+  # options hid-t150 preset=drift
+  # or udev ATTR{preset}="drift" in /etc/udev/rules.d/99-t150-defaults.rules
+EOF
+	exit 2
+}
+
+find_devices() {
+	local d
+	shopt -s nullglob
+	for d in /sys/bus/hid/drivers/hid-t150/0003:*; do
+		if [ -e "$d/preset" ]; then
+			readlink -f "$d"
+		fi
+	done
+	shopt -u nullglob
+}
+
+print_device() {
+	local devdir=$1
+	printf 'Device: %s\n' "$devdir"
+	printf '  preset:            %s\n' "$(cat "$devdir/preset" 2>/dev/null || echo unreadable)"
+	printf '  range:             %s\n' "$(cat "$devdir/range" 2>/dev/null || echo unreadable)"
+	printf '  gain:              %s\n' "$(cat "$devdir/gain" 2>/dev/null || echo unreadable)"
+	printf '  autocenter:        %s\n' "$(cat "$devdir/autocenter" 2>/dev/null || echo unreadable)"
+	printf '  enable_autocenter: %s\n' "$(cat "$devdir/enable_autocenter" 2>/dev/null || echo unreadable)"
+	printf '  spring_level:      %s\n' "$(cat "$devdir/spring_level" 2>/dev/null || echo unreadable)"
+	printf '  damper_level:      %s\n' "$(cat "$devdir/damper_level" 2>/dev/null || echo unreadable)"
+}
+
+list_presets() {
+	local names
+	if [ -n "${1:-}" ] && [ -e "$1/presets" ]; then
+		names=$(cat "$1/presets")
+		echo "Available: $names"
+	else
+		echo "Available: sim arcade street offroad rally drift truck"
+	fi
+	cat <<'EOF'
+
+  sim      Sim racing (default). Full rotation, game centering.
+  arcade   Arcade racers. 270°, hardware snap-back.
+  street   Street / open world (NFS, Forza Horizon). 540°.
+  offroad  Off-road. 540°, heavier damper.
+  rally    Rally (Dirt Rally, WRC). 540°, light damper.
+  drift    Drifting. 360°, no centering.
+  truck    Truck sims (ETS2, ATS). Full rotation, heavier feel.
+EOF
+}
+
+mapfile -t devices < <(find_devices)
+
+cmd=${1:-show}
+case "$cmd" in
+-h|--help|help)
+	usage
+	;;
+list)
+	list_presets "${devices[0]:-}"
+	exit 0
+	;;
+show)
+	if [ "${#devices[@]}" -eq 0 ]; then
+		echo "No hid-t150 device found. Is the module loaded and the wheel plugged in?" >&2
+		echo "  lsmod | grep hid_t150" >&2
+		echo "  ls /sys/bus/hid/drivers/hid-t150" >&2
+		exit 1
+	fi
+	for devdir in "${devices[@]}"; do
+		print_device "$devdir"
+	done
+	echo
+	list_presets "${devices[0]}"
+	exit 0
+	;;
+esac
+
+if [ "$#" -ne 1 ]; then
+	usage
+fi
+
+if [ "${#devices[@]}" -eq 0 ]; then
+	echo "No hid-t150 device found. Is the module loaded and the wheel plugged in?" >&2
+	exit 1
+fi
+
+name=$1
+applied=0
+for devdir in "${devices[@]}"; do
+	if [ ! -w "$devdir/preset" ]; then
+		echo "Cannot write $devdir/preset (try again; udev chmods this 0666 after bind)." >&2
+		exit 1
+	fi
+	if ! printf '%s\n' "$name" > "$devdir/preset"; then
+		echo "Unknown preset '$name'." >&2
+		list_presets "$devdir" >&2
+		exit 1
+	fi
+	echo "Applied '$name' to $devdir"
+	print_device "$devdir"
+	applied=1
+done
+
+if [ "$applied" -eq 0 ]; then
+	exit 1
+fi

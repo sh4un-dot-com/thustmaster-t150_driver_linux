@@ -11,6 +11,7 @@
 
 #include "ht150.h"
 #include "t150_ff_encode.h"
+#include "t150_presets.h"
 
 int
 ht150_send(struct ht150_softc *sc, const void *data, size_t len)
@@ -160,31 +161,71 @@ ht150_read_settings(struct ht150_softc *sc)
 }
 
 int
+ht150_apply_preset(struct ht150_softc *sc, const struct t150_preset *preset)
+{
+	uint16_t range;
+	int error;
+
+	if (preset == NULL)
+		return (EINVAL);
+
+	range = t150_preset_range_deg(preset, sc->max_range);
+	error = ht150_set_gain(sc, preset->gain);
+	if (error)
+		return (error);
+	error = ht150_set_enable_autocenter(sc, preset->enable_autocenter);
+	if (error)
+		return (error);
+	error = ht150_set_autocenter(sc, preset->autocenter);
+	if (error)
+		return (error);
+	error = ht150_set_range_deg(sc, range);
+	if (error)
+		return (error);
+	sc->spring_level = preset->spring_level;
+	sc->damper_level = preset->damper_level;
+	device_printf(sc->dev,
+	    "preset %s: range=%u gain=%u autocenter=%u enable=%u spring=%u damper=%u\n",
+	    preset->name, range, preset->gain, preset->autocenter,
+	    preset->enable_autocenter, preset->spring_level,
+	    preset->damper_level);
+	return (0);
+}
+
+const struct t150_preset *
+ht150_matched_preset(struct ht150_softc *sc)
+{
+	return (t150_preset_lookup_values(sc->range, sc->gain, sc->autocenter,
+	    sc->enable_autocenter, sc->spring_level, sc->damper_level,
+	    sc->max_range));
+}
+
+int
 ht150_setup(struct ht150_softc *sc)
 {
+	const struct t150_preset *preset;
 	int error;
 
 	error = ht150_read_settings(sc);
-	if (error == 0) {
+	if (error == 0)
 		device_printf(sc->dev,
 		    "settings from wheel: gain=%u autocenter=%u range=%u fw=%u\n",
 		    sc->gain, sc->autocenter, sc->range, sc->firmware_version);
-		return (0);
-	}
-
-	if (error == EAGAIN)
-		device_printf(sc->dev,
-		    "firmware version %u; applying default gain/range/autocenter\n",
+	else if (error == EAGAIN)
+		device_printf(sc->dev, "firmware version %u\n",
 		    sc->firmware_version);
 	else
 		device_printf(sc->dev,
-		    "unable to query wheel settings (%d), using defaults\n",
-		    error);
+		    "unable to query wheel settings (%d)\n", error);
 
-	(void)ht150_set_gain(sc, 0xbffe);
-	(void)ht150_set_enable_autocenter(sc, 0);
-	(void)ht150_set_autocenter(sc, 0x7fff);
-	(void)ht150_set_range_deg(sc, sc->max_range);
+	preset = t150_preset_by_name(ht150_default_preset);
+	if (preset == NULL) {
+		device_printf(sc->dev, "unknown preset '%s', using sim\n",
+		    ht150_default_preset);
+		preset = T150_PRESET_DEFAULT;
+	}
+
+	(void)ht150_apply_preset(sc, preset);
 	sc->cache_valid = 1;
 	return (0);
 }

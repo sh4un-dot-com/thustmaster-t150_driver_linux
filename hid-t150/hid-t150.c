@@ -14,11 +14,17 @@
 #include <linux/string.h>
 
 #include "hid-t150.h"
+#include "../common/t150_presets.h"
 #include "input.h"
 #include "attributes.h"
 #include "settings.h"
 #include "forcefeedback.h"
 #include "packet.h"
+
+static char *default_preset = "sim";
+module_param_named(preset, default_preset, charp, 0644);
+MODULE_PARM_DESC(preset,
+		 "Default wheel-feel preset: sim, arcade, street, offroad, rally, drift, truck");
 
 static int t150_find_endpoints(struct t150 *t150)
 {

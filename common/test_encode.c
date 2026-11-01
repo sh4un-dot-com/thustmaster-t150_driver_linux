@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "t150_ff_encode.h"
+#include "t150_presets.h"
 
 int
 main(void)
@@ -73,6 +74,26 @@ main(void)
 	assert(t150_range_to_wire(1080, 1080) == 0xffff);
 	assert(t150_range_from_wire(0xffff, 1080) == 1080);
 	assert(t150_autocenter_to_percent(0xffff) == 100);
+
+	assert(t150_preset_by_name("sim") == T150_PRESET_DEFAULT);
+	assert(t150_preset_by_name("SIM\n") == T150_PRESET_DEFAULT);
+	assert(t150_preset_by_name("simracing") == T150_PRESET_DEFAULT);
+	assert(t150_preset_by_name("drift") != NULL);
+	assert(strcmp(t150_preset_by_name("drifting")->name, "drift") == 0);
+	assert(t150_preset_by_name("off-road") != NULL);
+	assert(t150_preset_by_name("nope") == NULL);
+	assert(t150_preset_range_deg(t150_preset_by_name("sim"), 900) == 900);
+	assert(t150_preset_range_deg(t150_preset_by_name("arcade"), 1080) == 270);
+	assert(t150_preset_by_name("drift")->enable_autocenter == 0);
+	assert(t150_preset_by_name("arcade")->enable_autocenter == 1);
+	assert(t150_preset_lookup_values(
+		   t150_preset_range_deg(T150_PRESET_DEFAULT, 1080),
+		   T150_PRESET_DEFAULT->gain,
+		   T150_PRESET_DEFAULT->autocenter,
+		   T150_PRESET_DEFAULT->enable_autocenter,
+		   T150_PRESET_DEFAULT->spring_level,
+		   T150_PRESET_DEFAULT->damper_level,
+		   1080) == T150_PRESET_DEFAULT);
 
 	puts("t150 encode host test ok");
 	return 0;

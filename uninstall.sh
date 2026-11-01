@@ -51,7 +51,8 @@ rm -f /etc/udev/rules.d/10-t150.rules \
 	/etc/udev/rules.d/99-t150-defaults.rules \
 	/etc/modules-load.d/hid-t150.conf \
 	/etc/modprobe.d/hid-t150.conf \
-	/usr/lib/udev/hid-t150-rebind
+	/usr/lib/udev/hid-t150-rebind \
+	/usr/bin/t150-preset
 
 # Package-owned copies from the Fedora RPM
 rm -f /usr/lib/udev/rules.d/10-t150.rules \

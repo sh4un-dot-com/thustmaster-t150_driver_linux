@@ -69,6 +69,7 @@ Always plug the wheel **directly** into a USB port on the machine.
 - Sysfs knobs compatible with [Oversteer](https://github.com/berarma/oversteer)
 - Firmware version from vendor GET request 86 (byte 1)
 - Automatic rebind off `hid-generic` so FFB is actually available
+- Named wheel-feel presets (`sim` default, plus arcade/street/offroad/rally/drift/truck)
 
 `hid-generic` matches every HID device, and T150/TMX are not on the
 in-tree `HID_QUIRK_HAVE_SPECIAL_DRIVER` list. Without the udev helper
@@ -87,9 +88,11 @@ the wheel shows up as a joystick with `ff=0`.
   query `EV_FF` skip those two types. Typical racing FFB (constant,
   periodic, spring, damper, rumble) does not need them.
 - Vendor GET 86 often returns a **short** IN (firmware in byte 1, not a
-  full 8-byte settings block). Probe still applies default gain (~75%,
-  `0xbffe`), full range, and autocenter off. After that, sysfs reads use
-  the driver’s cache. Writes always go out on interrupt OUT.
+  full 8-byte settings block). Probe still reads firmware when it can,
+  then applies the **sim** feel preset (full rotation, 100% gain, hardware
+  autocenter off while a game is open). Switch with `t150-preset` or the
+  sysfs `preset` knob. After that, sysfs reads use the driver’s cache.
+  Writes always go out on interrupt OUT.
 
 ## Install (Linux)
 
@@ -153,6 +156,7 @@ lsmod | grep hid_t150
 ls /sys/bus/hid/drivers/hid-t150
 dmesg | grep -i t150
 ./hid-t150/test_sysfs.sh
+t150-preset
 ```
 
 You want a hid name such as `0003:044F:B677.xxxx` under `hid-t150`,
@@ -218,6 +222,8 @@ Oversteer can then write them as a normal user.
 | `enable_autocenter` | `y` / `n` | Keep hardware autocenter while a game has the device open |
 | `spring_level` | 0–100 | Scale applied to `FF_SPRING` |
 | `damper_level` | 0–100 | Scale applied to `FF_DAMPER` |
+| `preset` | name or `custom` | Apply a feel preset; reads back `custom` after a manual tweak |
+| `presets` | tokens, read-only | `sim arcade street offroad rally drift truck` |
 | `firmware_version` | integer, read-only | Firmware from vendor GET 86 |
 | `max_range` | 1080 or 900, read-only | Hardware maximum rotation |
 | `settings_cache_age_ms` | integer or `-1` | Age of the cached settings |
@@ -229,18 +235,55 @@ Reads use a 300 ms cache so Oversteer polling does not hammer USB.
 Writes go to the wheel immediately and update the cache.
 
 Oversteer drives `range`, `gain`, `autocenter`, `spring_level`, and
-`damper_level`.
+`damper_level`. After Oversteer writes those, `preset` reads `custom`
+until you apply a named preset again.
+
+### Wheel-feel presets
+
+Plug-in default is **sim**. The T150 only exposes rotation, global gain,
+hardware autocenter, and scales for game-sent spring/damper, so these
+change lock-to-lock and how strongly the wheel centers or resists — they
+are not per-game FFB files.
+
+| Preset | Range | Gain | Center in-game | Spring | Damper | Intended for |
+|--------|-------|------|----------------|--------|--------|--------------|
+| `sim` | 1080° (900° on TMX) | 100% | off | 100 | 100 | ACC, iRacing, Assetto Corsa, rF2, LMU |
+| `arcade` | 270° | 100% | on (40%) | 100 | 30 | Arcade racers, karts |
+| `street` | 540° | 90% | off | 60 | 45 | NFS, Forza Horizon, open-world |
+| `offroad` | 540° | 100% | off | 50 | 75 | Off-road, heavier chatter filtering |
+| `rally` | 540° | 90% | off | 25 | 35 | Dirt Rally, WRC |
+| `drift` | 360° | 80% | off (0) | 0 | 20 | Drift: fast countersteer, no snap-back |
+| `truck` | 1080° | 70% | off | 70 | 80 | ETS2, ATS |
+
+```sh
+t150-preset              # current knobs + list
+t150-preset list
+t150-preset drift
+echo rally > /sys/bus/hid/devices/0003:044F:B677.*/preset
+```
+
+udev chmods `preset` to `0666`, so a logged-in user can switch without
+root. Tweaking an individual knob (or Oversteer) leaves `preset` as
+`custom`. Writing a name reapplies the whole set.
+
+Change the plug-in default with a module parameter or udev:
+
+```
+# /etc/modprobe.d/hid-t150.conf
+options hid-t150 preset=drift
+```
+
+```
+# /etc/udev/rules.d/99-t150-defaults.rules
+SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{preset}="arcade"
+```
 
 ### Plug-in defaults
 
 `install.sh` copies a commented template to
-`/etc/udev/rules.d/99-t150-defaults.rules`. Uncomment and edit:
-
-```
-SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{range}="900", ATTR{gain}="49150"
-```
-
-Then:
+`/etc/udev/rules.d/99-t150-defaults.rules`. The driver already applies
+`sim` on probe. Uncomment a `ATTR{preset}=` line (or the individual
+knobs) and:
 
 ```sh
 sudo udevadm control --reload
@@ -317,6 +360,7 @@ as `hgame`):
 pw groupmod games -m "$USER"
 ht150ctl
 ht150ctl range 900
+ht150ctl preset drift
 ht150ctl test on     # canned sine; `ht150ctl test off` to stop
 sysctl dev.ht150
 ```
@@ -329,9 +373,12 @@ sysctl dev.ht150
 | `dev.ht150.N.wheel.enable_autocenter` | 0 / 1 | Keep hardware autocenter |
 | `dev.ht150.N.wheel.spring_level` | 0–100 | Scale applied to `FF_SPRING` |
 | `dev.ht150.N.wheel.damper_level` | 0–100 | Scale applied to `FF_DAMPER` |
+| `dev.ht150.N.wheel.preset` | name or `custom` | Apply a feel preset |
+| `dev.ht150.N.wheel.presets` | tokens, read-only | Available preset names |
 | `dev.ht150.N.wheel.test_ff` | write 1 / 0 | Play or stop a test sine |
 | `dev.ht150.N.wheel.firmware_version` | read-only | Vendor GET 86 byte 1 |
 | `dev.ht150.N.wheel.max_range` | read-only | 1080 or 900 |
+| `hw.ht150.preset` | name | Plug-in default (`sim`); tunable |
 
 **Game FFB through `/dev/input/event*` does not work on stock
 FreeBSD.** In-tree evdev fakes `EVIOCSFF` / `EVIOCGEFFECTS` and reports
@@ -339,8 +386,8 @@ no `EV_FF` bits, so SDL never uploads effects. Axes, buttons, and
 sysctl / `ht150ctl` FFB are the working path. This tree does not patch
 evdev.
 
-Linux `hid-t150` does not `#include` `common/`, so a DKMS build does
-not need that directory. Keep `common/t150_packets.h` in sync with
+Linux `hid-t150` includes `common/t150_presets.h`; DKMS copies that
+header. Keep `common/t150_packets.h` in sync with
 `hid-t150/forcefeedback.h` by hand.
 
 ```sh
@@ -389,9 +436,9 @@ reboot: `sysctl hw.usb.usbhid.enable` should be `1`.
 
 ```
 hid-t150/          Linux HID driver (version 1.1)
-files/             udev, modules-load.d, modprobe.d, rebind helper
+files/             udev, modules-load.d, modprobe.d, rebind helper, t150-preset
 freebsd/           hidbus kmod ht150 + ht150ctl
-common/            portable packet structs / encode (FreeBSD + host tests)
+common/            portable packet structs / encode / feel presets
 packaging/fedora/  t150-dkms.spec and build-rpm.sh
 install.sh         Linux or FreeBSD
 ```

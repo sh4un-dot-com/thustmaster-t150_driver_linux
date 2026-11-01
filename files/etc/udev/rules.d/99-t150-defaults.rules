@@ -2,4 +2,16 @@
 # install.sh copies this file to /etc/udev/rules.d/99-t150-defaults.rules.
 # Uncomment and edit, then: udevadm control --reload && udevadm trigger
 #
+# The driver already applies the "sim" preset on probe. To change the
+# plug-in feel, uncomment one ATTR{preset}= line (or write the knobs by hand).
+#
+# SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{preset}="sim"
+# SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{preset}="arcade"
+# SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{preset}="street"
+# SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{preset}="offroad"
+# SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{preset}="rally"
+# SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{preset}="drift"
+# SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{preset}="truck"
+#
+# Fine-tune individual knobs instead of a named preset:
 # SUBSYSTEM=="hid", DRIVER=="hid-t150", ATTR{range}="900", ATTR{gain}="49150", ATTR{spring_level}="100", ATTR{damper_level}="100"
