@@ -1,3 +1,4 @@
+/* Packet layout and commit codes: keep in sync with common/t150_packets.h. */
 #define T150_FF_BLIND_COMPUTE_EFFECT		false
 #define T150_FF_BLIND_UPLOAD			false
 

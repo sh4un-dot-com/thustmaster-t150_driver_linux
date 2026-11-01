@@ -1,4 +1,4 @@
-# Thrustmaster T150 and TMX Force Feedback Wheel Linux driver
+# Thrustmaster T150 and TMX Force Feedback Wheel driver
 
 **Disclaimer**
 This is not an official driver from Thrustmaster and is provided without any
@@ -6,12 +6,12 @@ kind of warranty. Loading and using this driver is at your own risk. The
 authors take no responsibility for kernel panics, bricked devices, or any
 other inconvenience.
 
-Out-of-tree HID driver (`hid-t150`) for:
+Out-of-tree HID driver: `hid-t150` on Linux, `ht150` on FreeBSD, for:
 
 | Wheel | USB ID after init | Rotation | Notes |
 |-------|-------------------|----------|--------|
 | T150 / T150RS | `044f:b677` | 270°–1080° | Mode switch on **PS3** before plugging in |
-| TMX | `044f:b67f` | 270°–900° | Needs a separate init driver first |
+| TMX | `044f:b67f` | 270°–900° | Linux: TMX-Driver or tmdrv first. FreeBSD: `ht150init` in `ht150.ko` |
 
 The in-tree `hid-thrustmaster` driver (kernel 5.13+) initializes a T150 from
 boot ID `044f:b65d` into full T150RS mode. TMX init is still
@@ -21,6 +21,10 @@ boot ID `044f:b65d` into full T150RS mode. TMX init is still
 ## Status
 
 Verified on CachyOS Linux 7.3 with a T150RS (firmware 35) in PS3 mode.
+
+Fedora/RHEL-like packaging and install support is in this tree; it was not
+hardware-tested on Fedora here. FreeBSD has a hidbus module in `freebsd/`;
+it was not hardware-tested on FreeBSD here.
 
 ### Working
 
@@ -50,13 +54,15 @@ cache. Writes always go out on the interrupt OUT endpoint.
 
 ## Install
 
-Needs matching kernel headers (`linux-headers` / `linux-cachyos-headers`)
-and a compiler. Clang-built kernels (CachyOS and some custom Arch/Fedora
-kernels) are detected automatically; the Makefile passes `LLVM=1`.
+Needs matching kernel headers and a compiler. Clang-built kernels (CachyOS
+and some custom Arch/Fedora kernels) are detected automatically; the
+Makefile passes `LLVM=1`. Stock Fedora uses GCC and does not need that.
 
 ```sh
 sudo ./install.sh
 ```
+
+On FreeBSD this runs `freebsd/install.sh`. On Linux it builds `hid-t150`.
 
 The script:
 
@@ -77,6 +83,10 @@ module rebuilt on kernel upgrades:
 ```sh
 # Arch / CachyOS
 sudo pacman -S dkms
+sudo ./install.sh
+
+# Fedora / RHEL-like
+sudo dnf install dkms kernel-devel-$(uname -r) gcc make elfutils-libelf-devel
 sudo ./install.sh
 ```
 
@@ -109,12 +119,111 @@ Uninstall:
 sudo ./uninstall.sh
 ```
 
+### Fedora / RHEL / CentOS Stream / Rocky / Alma
+
+Same Linux kmod. Install headers for the **running** kernel:
+
+```sh
+sudo dnf install kernel-devel-$(uname -r) gcc make elfutils-libelf-devel dkms
+sudo ./install.sh
+```
+
+Or build a DKMS RPM from this tree (needs `rpm-build`):
+
+```sh
+./packaging/fedora/build-rpm.sh
+sudo dnf install ~/rpmbuild/RPMS/noarch/t150-dkms-*.rpm
+```
+
+`install.sh` and the RPM run `restorecon` on the udev helper so SELinux
+allows udev to execute `/usr/lib/udev/hid-t150-rebind`.
+
+**Secure Boot:** the unsigned module will not load until a MOK is enrolled:
+
+```sh
+sudo mokutil --import /var/lib/dkms/mok.pub
+```
+
+Reboot and complete enrollment in the MOK manager. `install.sh` prints
+this reminder when `mokutil --sb-state` says Secure Boot is on.
+
+**Silverblue / Kinoite / ostree:** DKMS and writing under `/usr` are a
+poor fit. Use Workstation, a VM, or layer the RPM with `rpm-ostree` at
+your own risk.
+
+### FreeBSD
+
+The Linux `hid-t150.ko` cannot load. This tree ships `freebsd/ht150`, a
+hidbus module that matches `044f:b677` / `044f:b67f` (and `ht150init` for
+the `044f:b65d` boot identity, same GET 73 / SET 83 sequence as Linux
+`hid-thrustmaster`).
+
+Needs:
+
+- FreeBSD 13.1+ (usbhid `USB_REQUEST` ioctl for vendor GET/SET)
+- Kernel source (`/usr/src/sys` or `SYSDIR`) to build the kmod
+- `hw.usb.usbhid.enable=1` in `/boot/loader.conf` (FreeBSD 14; 15 defaults
+  usbhid on)
+- `EVDEV_SUPPORT` in the kernel (GENERIC has it)
+
+```sh
+sudo ./install.sh
+```
+
+That builds `/boot/modules/ht150.ko`, installs `ht150ctl`, a devd snippet,
+appends `hw.usb.usbhid.enable=1` if missing, and adds `ht150` to
+`kld_list`. A reboot is required the first time usbhid is enabled. If
+the wheel is already plugged when you `kldload ht150`, unplug and
+replug so hidbus re-probes (ht150 beats `hgame` at `BUS_PROBE_DEFAULT`).
+
+Put the user in group `games` so `/dev/input/event*` is writable (same
+as `hgame`).
+
+```sh
+pw groupmod games -m "$USER"
+ht150ctl
+ht150ctl range 900
+ht150ctl test on    # canned sine; write off to stop
+sysctl dev.ht150
+```
+
+Sysctl knobs (Oversteer-shaped values):
+
+| Sysctl | Values | Description |
+|--------|--------|-------------|
+| `dev.ht150.N.wheel.range` | 270–1080 (TMX max 900) | Rotation in degrees |
+| `dev.ht150.N.wheel.gain` | 0–65535 | Global FFB intensity |
+| `dev.ht150.N.wheel.autocenter` | 0–65535 | Hardware spring-back |
+| `dev.ht150.N.wheel.enable_autocenter` | 0 / 1 | Keep hardware autocenter |
+| `dev.ht150.N.wheel.spring_level` | 0–100 | Scale applied to `FF_SPRING` |
+| `dev.ht150.N.wheel.damper_level` | 0–100 | Scale applied to `FF_DAMPER` |
+| `dev.ht150.N.wheel.test_ff` | write 1 / 0 | Play or stop a test sine |
+| `dev.ht150.N.wheel.firmware_version` | read-only | Vendor GET 86 byte 1 |
+| `dev.ht150.N.wheel.max_range` | read-only | 1080 or 900 |
+
+**Force feedback from games does not work on stock FreeBSD.** In-tree
+evdev fakes `EVIOCSFF` / `EVIOCGEFFECTS` and reports no `EV_FF` bits, so
+SDL never uploads effects. Axes, buttons, and sysctl/ht150ctl FFB work.
+A kernel with a real `EVIOCSFF` path would still need this module; this
+tree does not patch evdev.
+
+Packet encode lives in `common/` and is kept in sync with Linux
+`hid-t150/forcefeedback.c`. Linux does not `#include` those headers, so
+a DKMS build does not need `common/`.
+
 ### Manual build
 
 ```sh
 make
 sudo insmod hid-t150/hid-t150.ko
 sudo /usr/lib/udev/hid-t150-rebind 0003:044F:B677.xxxx   # after installing the helper
+
+# Packet-size / encode check (no kernel headers)
+make test-encode
+
+# FreeBSD kmod (on FreeBSD, with /usr/src/sys)
+make -C freebsd
+sudo make -C freebsd install
 ```
 
 `insmod` alone leaves an already-probed wheel on `hid-generic`. Prefer
@@ -196,6 +305,23 @@ to survive kernel upgrades.
 **`sign-file: certs/signing_key.pem` during install.** The distro kernel
 is signed; headers do not ship a private key. Harmless when
 `module.sig_enforce` is `N`.
+
+**Fedora: module missing with Secure Boot on.** Enroll the DKMS MOK
+(`mokutil --import /var/lib/dkms/mok.pub`) and reboot. `dmesg` will say
+the module is unsigned until then.
+
+**Fedora: udev rebind blocked by SELinux.** `install.sh` runs
+`restorecon` on `/usr/lib/udev/hid-t150-rebind`. If it still fails:
+`ausearch -m avc -ts recent | grep hid-t150`.
+
+**FreeBSD: no `/dev/input/event*` for the wheel.** Enable usbhid and
+reboot: `sysctl hw.usb.usbhid.enable` should be `1`. `kldstat -v | grep
+ht150` should list the module. `hgame` must not own the device;
+`ht150` probes at `BUS_PROBE_DEFAULT`.
+
+**FreeBSD: game has no FFB.** Stock evdev stubs `EVIOCSFF`. Use
+`ht150ctl test on` to confirm the USB path, and `ht150ctl gain` /
+`range` for setup. SDL/Proton FFB needs a patched evdev.
 
 ## License
 

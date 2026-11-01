@@ -12,6 +12,27 @@ hid-t150/.module-common.o
 hid-t150/*.o.d
 build/
 
+# FreeBSD kmod.mk artifacts
+freebsd/*.o
+freebsd/*.ko
+freebsd/*.ko.full
+freebsd/*.ko.debug
+freebsd/*.kld
+freebsd/@
+freebsd/machine
+freebsd/x86
+freebsd/amd64
+freebsd/hid_if.h
+freebsd/bus_if.h
+freebsd/device_if.h
+freebsd/vnode_if.h
+freebsd/usb_if.h
+freebsd/opt_*.h
+freebsd/.depend*
+freebsd/export_syms
+freebsd/ht150ctl
+common/test_encode
+
 .vscode
 .idea
 traffic/sniffer

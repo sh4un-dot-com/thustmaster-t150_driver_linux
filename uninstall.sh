@@ -1,9 +1,30 @@
-#!/bin/bash
-
-set -euo pipefail
+#!/bin/sh
+# Uninstall hid-t150 on Linux, or ht150 on FreeBSD.
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-VERSION=1.1
+
+os=$(uname -s)
+case "$os" in
+FreeBSD)
+	exec "$SCRIPT_DIR/freebsd/uninstall.sh" "$@"
+	;;
+Linux)
+	;;
+*)
+	echo "Unsupported OS: $os (Linux and FreeBSD only)" >&2
+	exit 1
+	;;
+esac
+
+if [ -z "${BASH_VERSION:-}" ]; then
+	if command -v bash >/dev/null 2>&1; then
+		exec bash "$SCRIPT_DIR/uninstall.sh" "$@"
+	fi
+	echo "bash is required on Linux." >&2
+	exit 1
+fi
+
+set -euo pipefail
 
 if [ "${EUID}" -ne 0 ]; then
 	echo "You are not running this script as root!"
@@ -31,6 +52,11 @@ rm -f /etc/udev/rules.d/10-t150.rules \
 	/etc/modules-load.d/hid-t150.conf \
 	/etc/modprobe.d/hid-t150.conf \
 	/usr/lib/udev/hid-t150-rebind
+
+# Package-owned copies from the Fedora RPM
+rm -f /usr/lib/udev/rules.d/10-t150.rules \
+	/usr/lib/modules-load.d/hid-t150.conf \
+	/usr/lib/modprobe.d/hid-t150.conf
 
 # Current-kernel extra module from `make install` (plain or zstd-compressed)
 KVER=$(uname -r)

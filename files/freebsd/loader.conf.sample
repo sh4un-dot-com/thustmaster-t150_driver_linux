@@ -1,0 +1,6 @@
+# T150/TMX: usbhid(4) so hidbus can attach ht150.
+# Required on FreeBSD 14. FreeBSD 15 enables usbhid by default.
+hw.usb.usbhid.enable=1
+
+# Optional if you do not use `sysrc kld_list+= ht150`:
+# ht150_load="YES"
